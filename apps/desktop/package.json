@@ -1,0 +1,52 @@
+{
+  "name": "@pharmacy/desktop",
+  "version": "1.0.0",
+  "description": "Pharmacy SaaS — Desktop Application",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "dist": "electron-builder --win",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@pharmacy/shared": "workspace:*",
+    "@prisma/client": "^5.14.0",
+    "bcryptjs": "^2.4.3",
+    "electron-updater": "^6.3.0",
+    "serialport": "^12.0.0",
+    "axios": "^1.7.0",
+    "bull": "^4.12.0",
+    "ioredis": "^5.3.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.0",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.0",
+    "electron-vite": "^2.3.0",
+    "prisma": "^5.14.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/serialport": "^8.0.4",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-router-dom": "^6.24.0",
+    "zustand": "^4.5.0",
+    "@tanstack/react-query": "^5.40.0",
+    "lucide-react": "^0.400.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.3.0",
+    "tailwindcss": "^3.4.4",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "recharts": "^2.12.0",
+    "date-fns": "^3.6.0",
+    "sonner": "^1.5.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.3.0"
+  }
+}

@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+
+# Prisma generated migrations (keep schema, ignore migrations)
+apps/api/prisma/migrations/
+
+# Environment files — NEVER commit secrets
+.env
+.env.*
+!.env.example
+
+# pnpm
+.pnpm-store/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
+
+# Test coverage
+coverage/
+
+# Turbo
+.turbo/

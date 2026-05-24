@@ -1,0 +1,743 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── CORE ─────────────────────────────────────────────────────────────────────
+
+model Tenant {
+  id             String   @id @default(uuid())
+  name           String
+  subdomain      String   @unique
+  logoUrl        String?
+  planId         String   @default("starter")
+  status         String   @default("trial")
+  trialEndsAt    String?
+  settings       String   @default("{}")  // JSON string
+  enabledModules String   @default("[\"inventory\",\"pos\",\"fbr\"]") // JSON array
+  createdAt      String   @default("")
+  updatedAt      String   @default("")
+
+  branches    Branch[]
+  users       User[]
+  products    Product[]
+  sales       Sale[]
+  customers   Customer[]
+  suppliers   Supplier[]
+  employees   Employee[]
+
+  @@map("tenants")
+}
+
+model Branch {
+  id        String  @id @default(uuid())
+  tenantId  String
+  name      String
+  address   String?
+  phone     String?
+  fbrPosId  String?
+  isActive  Int     @default(1)
+
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  users     User[]
+  sales     Sale[]
+
+  @@map("branches")
+}
+
+model Role {
+  id          String @id @default(uuid())
+  tenantId    String
+  name        String
+  permissions String @default("[]") // JSON
+  isSystem    Int    @default(0)
+
+  users       User[]
+
+  @@unique([tenantId, name])
+  @@map("roles")
+}
+
+model User {
+  id           String  @id @default(uuid())
+  tenantId     String
+  branchId     String?
+  email        String
+  passwordHash String
+  name         String
+  phone        String?
+  roleId       String
+  branchAccess String  @default("[]") // JSON
+  isActive     Int     @default(1)
+  lastLoginAt  String?
+  createdAt    String  @default("")
+
+  tenant       Tenant  @relation(fields: [tenantId], references: [id])
+  branch       Branch? @relation(fields: [branchId], references: [id])
+  role         Role    @relation(fields: [roleId], references: [id])
+  sales        Sale[]
+  refreshTokens RefreshToken[]
+
+  @@unique([tenantId, email])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String @id @default(uuid())
+  userId    String
+  tokenHash String @unique
+  expiresAt String
+  revokedAt String?
+  createdAt String @default("")
+
+  user      User   @relation(fields: [userId], references: [id])
+
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id         String  @id @default(uuid())
+  tenantId   String
+  userId     String?
+  action     String
+  entityType String
+  entityId   String
+  oldValue   String? // JSON
+  newValue   String? // JSON
+  ipAddress  String?
+  createdAt  String  @default("")
+
+  @@index([tenantId, entityType])
+  @@map("audit_logs")
+}
+
+// ─── INVENTORY ────────────────────────────────────────────────────────────────
+
+model Category {
+  id       String     @id @default(uuid())
+  tenantId String
+  name     String
+  parentId String?
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@unique([tenantId, name])
+  @@map("categories")
+}
+
+model Product {
+  id            String   @id @default(uuid())
+  tenantId      String
+  categoryId    String?
+  name          String
+  genericName   String?
+  brandName     String?
+  manufacturer  String?
+  drugSchedule  String?
+  isControlled  Int      @default(0)
+  isRxOnly      Int      @default(0)
+  atcCode       String?
+  drapNumber    String?
+  packSize      Int      @default(1)
+  unitOfMeasure String   @default("pcs")
+  barcodes      String   @default("[]") // JSON array
+  costPrice     Float    @default(0)
+  salePrice     Float    @default(0)
+  taxRate       Float    @default(0)
+  reorderPoint  Int      @default(0)
+  maxStock      Int      @default(0)
+  imageUrl      String?
+  isActive      Int      @default(1)
+  createdAt     String   @default("")
+  updatedAt     String   @default("")
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  category      Category? @relation(fields: [categoryId], references: [id])
+  batches       Batch[]
+  stockLevels   StockLevel[]
+  saleItems     SaleItem[]
+  poItems       PoItem[]
+
+  @@index([tenantId, name])
+  @@map("products")
+}
+
+model Batch {
+  id           String  @id @default(uuid())
+  tenantId     String
+  productId    String
+  supplierId   String?
+  grnId        String?
+  batchNumber  String
+  lotNumber    String?
+  mfgDate      String?
+  expiryDate   String
+  qtyReceived  Int
+  costPerUnit  Float
+  createdAt    String  @default("")
+
+  product      Product      @relation(fields: [productId], references: [id])
+  stockLevels  StockLevel[]
+  saleItems    SaleItem[]
+
+  @@index([tenantId, productId])
+  @@index([tenantId, expiryDate])
+  @@map("batches")
+}
+
+model StockLevel {
+  id        String @id @default(uuid())
+  tenantId  String
+  productId String
+  batchId   String
+  branchId  String
+  quantity  Int    @default(0)
+
+  product   Product @relation(fields: [productId], references: [id])
+  batch     Batch   @relation(fields: [batchId], references: [id])
+
+  @@unique([tenantId, productId, batchId, branchId])
+  @@map("stock_levels")
+}
+
+model StockMovement {
+  id            String  @id @default(uuid())
+  tenantId      String
+  productId     String
+  batchId       String?
+  branchId      String
+  movementType  String
+  quantity      Int
+  referenceType String?
+  referenceId   String?
+  notes         String?
+  performedById String?
+  createdAt     String  @default("")
+
+  @@index([tenantId, productId])
+  @@map("stock_movements")
+}
+
+// ─── POS ──────────────────────────────────────────────────────────────────────
+
+model Customer {
+  id               String  @id @default(uuid())
+  tenantId         String
+  name             String
+  cnic             String?
+  phone            String?
+  email            String?
+  dateOfBirth      String?
+  gender           String?
+  address          String?
+  allergies        String  @default("[]") // JSON
+  chronicConditions String?
+  creditLimit      Float   @default(0)
+  creditBalance    Float   @default(0)
+  loyaltyTier      String  @default("none")
+  loyaltyPoints    Int     @default(0)
+  walletBalance    Float   @default(0)
+  isActive         Int     @default(1)
+  createdAt        String  @default("")
+
+  tenant           Tenant  @relation(fields: [tenantId], references: [id])
+  sales            Sale[]
+  prescriptions    Prescription[]
+  loyaltyTxns      LoyaltyTransaction[]
+  deliveryOrders   DeliveryOrder[]
+
+  @@index([tenantId, phone])
+  @@map("customers")
+}
+
+model Sale {
+  id               String  @id @default(uuid())
+  tenantId         String
+  branchId         String
+  clientId         String  @unique
+  invoiceNumber    String
+  fbrInvoiceNumber String?
+  fbrSyncStatus    String  @default("pending")
+  customerId       String?
+  prescriptionId   String?
+  cashierId        String
+  saleDate         String  @default("")
+  subtotal         Float
+  discountAmount   Float   @default(0)
+  taxAmount        Float   @default(0)
+  total            Float
+  payments         String  @default("[]") // JSON
+  status           String  @default("completed")
+  notes            String?
+  createdAt        String  @default("")
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  branch           Branch   @relation(fields: [branchId], references: [id])
+  customer         Customer? @relation(fields: [customerId], references: [id])
+  cashier          User     @relation(fields: [cashierId], references: [id])
+  items            SaleItem[]
+  fbrQueue         FbrSyncQueue[]
+  loyaltyTxns      LoyaltyTransaction[]
+  deliveryOrder    DeliveryOrder?
+
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId, branchId, saleDate])
+  @@map("sales")
+}
+
+model SaleItem {
+  id         String @id @default(uuid())
+  saleId     String
+  productId  String
+  batchId    String?
+  quantity   Int
+  unitPrice  Float
+  discount   Float  @default(0)
+  taxAmount  Float  @default(0)
+  lineTotal  Float
+
+  sale       Sale    @relation(fields: [saleId], references: [id])
+  product    Product @relation(fields: [productId], references: [id])
+  batch      Batch?  @relation(fields: [batchId], references: [id])
+
+  @@map("sale_items")
+}
+
+model CashDrawer {
+  id           String  @id @default(uuid())
+  tenantId     String
+  branchId     String
+  openedById   String
+  closedById   String?
+  openingCash  Float
+  closingCash  Float?
+  expectedCash Float?
+  variance     Float?
+  openedAt     String  @default("")
+  closedAt     String?
+  notes        String?
+
+  @@map("cash_drawers")
+}
+
+// ─── FBR ──────────────────────────────────────────────────────────────────────
+
+model FbrSyncQueue {
+  id          String  @id @default(uuid())
+  tenantId    String
+  saleId      String
+  payload     String  // JSON
+  status      String  @default("pending")
+  attempts    Int     @default(0)
+  lastError   String?
+  fbrResponse String? // JSON
+  syncedAt    String?
+  createdAt   String  @default("")
+  nextRetryAt String?
+
+  sale        Sale    @relation(fields: [saleId], references: [id])
+
+  @@index([tenantId, status])
+  @@map("fbr_sync_queue")
+}
+
+// ─── PRESCRIPTIONS ────────────────────────────────────────────────────────────
+
+model Doctor {
+  id             String @id @default(uuid())
+  tenantId       String
+  name           String
+  pmdcNumber     String?
+  specialization String?
+  clinicName     String?
+  phone          String?
+  isActive       Int    @default(1)
+
+  prescriptions  Prescription[]
+
+  @@map("doctors")
+}
+
+model Prescription {
+  id          String @id @default(uuid())
+  tenantId    String
+  customerId  String
+  doctorId    String?
+  branchId    String
+  issueDate   String
+  expiryDate  String?
+  diagnosis   String?
+  scanUrl     String?
+  status      String @default("pending")
+  notes       String?
+  createdById String
+  createdAt   String @default("")
+
+  customer    Customer @relation(fields: [customerId], references: [id])
+  doctor      Doctor?  @relation(fields: [doctorId], references: [id])
+  items       PrescriptionItem[]
+
+  @@index([tenantId, customerId])
+  @@map("prescriptions")
+}
+
+model PrescriptionItem {
+  id             String @id @default(uuid())
+  prescriptionId String
+  productId      String
+  qtyPrescribed  Int
+  qtyDispensed   Int    @default(0)
+  instructions   String?
+  isControlled   Int    @default(0)
+
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id])
+
+  @@map("prescription_items")
+}
+
+// ─── PURCHASING ───────────────────────────────────────────────────────────────
+
+model Supplier {
+  id            String @id @default(uuid())
+  tenantId      String
+  name          String
+  ntn           String?
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  paymentTerms  Int    @default(30)
+  leadDays      Int    @default(7)
+  isActive      Int    @default(1)
+  createdAt     String @default("")
+
+  tenant        Tenant  @relation(fields: [tenantId], references: [id])
+  purchaseOrders PurchaseOrder[]
+
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id           String @id @default(uuid())
+  tenantId     String
+  branchId     String
+  supplierId   String
+  poNumber     String
+  status       String @default("draft")
+  expectedDate String?
+  approvedById String?
+  notes        String?
+  createdById  String
+  createdAt    String @default("")
+
+  supplier     Supplier @relation(fields: [supplierId], references: [id])
+  items        PoItem[]
+  grns         Grn[]
+
+  @@unique([tenantId, poNumber])
+  @@map("purchase_orders")
+}
+
+model PoItem {
+  id          String @id @default(uuid())
+  poId        String
+  productId   String
+  qtyOrdered  Int
+  qtyReceived Int    @default(0)
+  unitCost    Float
+  lineTotal   Float
+
+  po          PurchaseOrder @relation(fields: [poId], references: [id])
+  product     Product       @relation(fields: [productId], references: [id])
+
+  @@map("po_items")
+}
+
+model Grn {
+  id                    String @id @default(uuid())
+  tenantId              String
+  poId                  String?
+  branchId              String
+  supplierId            String
+  supplierInvoiceNumber String?
+  receivedDate          String @default("")
+  receivedById          String
+  status                String @default("draft")
+  notes                 String?
+
+  po                    PurchaseOrder? @relation(fields: [poId], references: [id])
+  items                 GrnItem[]
+
+  @@map("grns")
+}
+
+model GrnItem {
+  id          String @id @default(uuid())
+  grnId       String
+  productId   String
+  batchId     String?
+  qtyReceived Int
+  costPerUnit Float
+
+  grn         Grn @relation(fields: [grnId], references: [id])
+
+  @@map("grn_items")
+}
+
+// ─── ACCOUNTS ─────────────────────────────────────────────────────────────────
+
+model Account {
+  id          String    @id @default(uuid())
+  tenantId    String
+  code        String
+  name        String
+  accountType String
+  parentId    String?
+  parent      Account?  @relation("AccountTree", fields: [parentId], references: [id])
+  children    Account[] @relation("AccountTree")
+  isSystem    Int       @default(0)
+  isActive    Int       @default(1)
+
+  journalLines JournalLine[]
+
+  @@unique([tenantId, code])
+  @@map("accounts")
+}
+
+model JournalEntry {
+  id            String @id @default(uuid())
+  tenantId      String
+  entryDate     String
+  referenceType String?
+  referenceId   String?
+  description   String
+  isPosted      Int    @default(0)
+  createdById   String
+  createdAt     String @default("")
+
+  lines         JournalLine[]
+
+  @@index([tenantId, entryDate])
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id             String       @id @default(uuid())
+  journalEntryId String
+  accountId      String
+  debit          Float        @default(0)
+  credit         Float        @default(0)
+  narration      String?
+
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id])
+  account        Account      @relation(fields: [accountId], references: [id])
+
+  @@map("journal_lines")
+}
+
+// ─── PAYROLL ──────────────────────────────────────────────────────────────────
+
+model Employee {
+  id              String @id @default(uuid())
+  tenantId        String
+  branchId        String?
+  name            String
+  cnic            String?
+  designation     String?
+  department      String?
+  phone           String?
+  email           String?
+  dateOfJoining   String
+  dateOfLeaving   String?
+  basicSalary     Float
+  salaryComponents String @default("{}") // JSON
+  bankName        String?
+  bankAccount     String?
+  eobi            Int    @default(0)
+  sessi           Int    @default(0)
+  isActive        Int    @default(1)
+  createdAt       String @default("")
+
+  tenant          Tenant @relation(fields: [tenantId], references: [id])
+  attendanceRecords AttendanceRecord[]
+  leaveApplications LeaveApplication[]
+  payrollItems    PayrollItem[]
+
+  @@map("employees")
+}
+
+model AttendanceRecord {
+  id              String @id @default(uuid())
+  tenantId        String
+  employeeId      String
+  branchId        String
+  date            String
+  checkIn         String?
+  checkOut        String?
+  source          String @default("manual")
+  overtimeMinutes Int    @default(0)
+  isAbsent        Int    @default(0)
+  isLeave         Int    @default(0)
+  notes           String?
+
+  employee        Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([tenantId, employeeId, date])
+  @@map("attendance_records")
+}
+
+model LeaveApplication {
+  id           String @id @default(uuid())
+  tenantId     String
+  employeeId   String
+  leaveType    String
+  fromDate     String
+  toDate       String
+  days         Int
+  reason       String?
+  status       String @default("pending")
+  approvedById String?
+  approvedAt   String?
+  createdAt    String @default("")
+
+  employee     Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("leave_applications")
+}
+
+model PayrollRun {
+  id            String @id @default(uuid())
+  tenantId      String
+  month         Int
+  year          Int
+  status        String @default("draft")
+  processedById String
+  approvedById  String?
+  paidAt        String?
+  createdAt     String @default("")
+
+  items         PayrollItem[]
+
+  @@unique([tenantId, month, year])
+  @@map("payroll_runs")
+}
+
+model PayrollItem {
+  id              String @id @default(uuid())
+  payrollRunId    String
+  employeeId      String
+  workingDays     Int
+  presentDays     Int
+  overtimeHours   Float  @default(0)
+  grossPay        Float
+  deductions      String @default("{}") // JSON
+  allowances      String @default("{}") // JSON
+  netPay          Float
+  bankTransferRef String?
+  isPaid          Int    @default(0)
+
+  payrollRun      PayrollRun @relation(fields: [payrollRunId], references: [id])
+  employee        Employee   @relation(fields: [employeeId], references: [id])
+
+  @@map("payroll_items")
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+
+model NotificationTemplate {
+  id        String @id @default(uuid())
+  tenantId  String
+  key       String
+  channel   String
+  subject   String?
+  body      String
+  isActive  Int    @default(1)
+
+  @@unique([tenantId, key, channel])
+  @@map("notification_templates")
+}
+
+model NotificationLog {
+  id            String  @id @default(uuid())
+  tenantId      String
+  recipientType String
+  recipientId   String
+  channel       String
+  templateKey   String?
+  payload       String  // JSON
+  status        String  @default("queued")
+  errorMessage  String?
+  externalId    String?
+  sentAt        String?
+  deliveredAt   String?
+  createdAt     String  @default("")
+
+  @@index([tenantId, recipientId])
+  @@map("notification_logs")
+}
+
+// ─── LOYALTY ──────────────────────────────────────────────────────────────────
+
+model LoyaltyTransaction {
+  id           String @id @default(uuid())
+  tenantId     String
+  customerId   String
+  saleId       String?
+  type         String
+  points       Int
+  balanceAfter Int
+  notes        String?
+  createdAt    String @default("")
+
+  customer     Customer @relation(fields: [customerId], references: [id])
+
+  @@index([tenantId, customerId])
+  @@map("loyalty_transactions")
+}
+
+// ─── DELIVERY ─────────────────────────────────────────────────────────────────
+
+model DeliveryOrder {
+  id             String  @id @default(uuid())
+  tenantId       String
+  saleId         String  @unique
+  customerId     String
+  riderId        String?
+  address        String  // JSON
+  status         String  @default("placed")
+  deliveryCharge Float   @default(0)
+  dispatchedAt   String?
+  deliveredAt    String?
+  podUrl         String?
+  notes          String?
+  createdAt      String  @default("")
+
+  sale           Sale     @relation(fields: [saleId], references: [id])
+  customer       Customer @relation(fields: [customerId], references: [id])
+
+  @@index([tenantId, status])
+  @@map("delivery_orders")
+}
+
+// ─── DRUG INTERACTIONS (shared reference data) ────────────────────────────────
+
+model DrugInteraction {
+  id          String @id @default(uuid())
+  drugAAtc    String
+  drugBAtc    String
+  severity    String
+  description String
+  mechanism   String?
+  management  String?
+  source      String?
+  updatedAt   String @default("")
+
+  @@unique([drugAAtc, drugBAtc])
+  @@map("drug_interactions")
+}

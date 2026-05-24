@@ -1,0 +1,37 @@
+appId: com.pharmasaas.desktop
+productName: PharmaSaaS
+copyright: Copyright © 2024
+
+directories:
+  output: dist
+  buildResources: resources
+
+files:
+  - out/**/*
+  - node_modules/**/*
+  - package.json
+
+extraResources:
+  - from: prisma/
+    to: prisma/
+    filter: ["**/*.prisma", "**/*.db"]
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: PharmaSaaS
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+
+publish:
+  provider: github
+  owner: your-github-username
+  repo: pharmacy-saas

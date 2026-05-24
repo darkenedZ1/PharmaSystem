@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:ipv6.fbr.gov.pk)",
+      "WebFetch(domain:oneclickpos.pk)",
+      "WebFetch(domain:sandbox.jazzcash.com.pk)",
+      "WebFetch(domain:fbr.gov.pk)",
+      "WebFetch(domain:thetasolutions.pk)",
+      "WebFetch(domain:transactflow.pk)",
+      "WebFetch(domain:download1.fbr.gov.pk)",
+      "WebFetch(domain:www.intellicon.io)",
+      "WebFetch(domain:logiclayer.com.pk)",
+      "WebFetch(domain:neon.com)",
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(pnpm --version 2>$null)",
+      "PowerShell(docker --version 2>$null)",
+      "Bash(extract-text \"SmartBiz_Pro_Competitive_Documentation.docx\")",
+      "Bash(python -c ' *)",
+      "Bash(Get-ChildItem -Path \"D:\\\\Softwares\\\\Pharmacy\\\\apps\\\\api\\\\src\\\\modules\" -Recurse -Filter \"*.ts\")",
+      "Bash(Select-Object FullName)",
+      "Bash(Sort-Object FullName)",
+      "PowerShell(Get-Command node -ErrorAction SilentlyContinue; if \\(Test-Path \"C:\\\\Program Files\\\\nodejs\\\\node.exe\"\\) { \"found at Program Files\" } elseif \\(Test-Path \"$env:APPDATA\\\\nvm\"\\) { Get-ChildItem \"$env:APPDATA\\\\nvm\" } elseif \\(Test-Path \"C:\\\\nvm\"\\) { Get-ChildItem \"C:\\\\nvm\" })",
+      "PowerShell($env:PATH)"
+    ]
+  }
+}

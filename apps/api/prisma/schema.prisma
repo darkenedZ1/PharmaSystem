@@ -1,0 +1,952 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── CORE MODULE ─────────────────────────────────────────────────────────────
+
+model Tenant {
+  id          String   @id @default(uuid())
+  name        String
+  subdomain   String   @unique
+  logoUrl     String?
+  planId      String   @default("starter")
+  status      String   @default("active") // active | suspended | trial
+  trialEndsAt DateTime?
+  settings    Json     @default("{}")
+  // Enabled module IDs — controls feature access for this tenant
+  enabledModules String[] @default(["inventory", "pos", "fbr"])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  branches    Branch[]
+  users       User[]
+  products    Product[]
+  batches     Batch[]
+  sales       Sale[]
+  customers   Customer[]
+  suppliers   Supplier[]
+  purchaseOrders PurchaseOrder[]
+  employees   Employee[]
+  payrollRuns PayrollRun[]
+  accounts    Account[]
+  journalEntries JournalEntry[]
+  fbrSyncQueue FbrSyncQueue[]
+  notifications NotificationLog[]
+  loyaltyTransactions LoyaltyTransaction[]
+  deliveryOrders DeliveryOrder[]
+
+  @@map("tenants")
+}
+
+model Branch {
+  id        String  @id @default(uuid())
+  tenantId  String
+  name      String
+  address   String?
+  phone     String?
+  fbrPosId  String? // FBR-assigned POS ID for this branch
+  isActive  Boolean @default(true)
+  createdAt DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  users     User[]
+  stockLevels StockLevel[]
+  sales     Sale[]
+  grns      Grn[]
+  cashDrawers CashDrawer[]
+  attendanceRecords AttendanceRecord[]
+
+  @@map("branches")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  permissions Json     @default("[]") // Array of {action, resource}
+  isSystem    Boolean  @default(false) // system roles cannot be deleted
+  createdAt   DateTime @default(now())
+
+  users       User[]
+
+  @@unique([tenantId, name])
+  @@map("roles")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  tenantId     String
+  branchId     String?
+  employeeId   String?   @unique
+  email        String
+  passwordHash String
+  name         String
+  phone        String?
+  roleId       String
+  // Branches user has access to (empty = all branches)
+  branchAccess String[]  @default([])
+  twoFactorSecret String?
+  isTwoFactorEnabled Boolean @default(false)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  branch       Branch?   @relation(fields: [branchId], references: [id])
+  role         Role      @relation(fields: [roleId], references: [id])
+  sales        Sale[]
+  auditLogs    AuditLog[]
+  refreshTokens RefreshToken[]
+
+  @@unique([tenantId, email])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  userId     String?
+  action     String   // created | updated | deleted | approved | etc.
+  entityType String
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}
+
+// ─── INVENTORY MODULE ─────────────────────────────────────────────────────────
+
+model Category {
+  id       String    @id @default(uuid())
+  tenantId String
+  name     String
+  parentId String?
+  parent   Category? @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@unique([tenantId, name])
+  @@map("categories")
+}
+
+model Product {
+  id            String   @id @default(uuid())
+  tenantId      String
+  categoryId    String?
+  name          String
+  genericName   String?
+  brandName     String?
+  manufacturer  String?
+  // Drug-specific fields
+  drugSchedule  String?  // OTC | Schedule H | Schedule X | etc.
+  isControlled  Boolean  @default(false)
+  isRxOnly      Boolean  @default(false)
+  atcCode       String?  // Anatomical Therapeutic Chemical code
+  drapNumber    String?  // DRAP registration number
+  // Packaging
+  packSize      Int      @default(1)
+  unitOfMeasure String   @default("pcs")
+  barcodes      String[] @default([])
+  // Pricing
+  costPrice     Decimal  @default(0) @db.Decimal(10, 2)
+  salePrice     Decimal  @default(0) @db.Decimal(10, 2)
+  taxRate       Decimal  @default(0) @db.Decimal(5, 2)
+  // Stock control
+  reorderPoint  Int      @default(0)
+  maxStock      Int      @default(0)
+  // Meta
+  imageUrl      String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  category      Category? @relation(fields: [categoryId], references: [id])
+  batches       Batch[]
+  stockLevels   StockLevel[]
+  saleItems     SaleItem[]
+  poItems       PoItem[]
+  stockMovements StockMovement[]
+
+  @@index([tenantId, name])
+  @@index([tenantId, genericName])
+  @@map("products")
+}
+
+model Batch {
+  id           String   @id @default(uuid())
+  tenantId     String
+  productId    String
+  supplierId   String?
+  grnId        String?
+  batchNumber  String
+  lotNumber    String?
+  mfgDate      DateTime?
+  expiryDate   DateTime
+  qtyReceived  Int
+  costPerUnit  Decimal  @db.Decimal(10, 2)
+  createdAt    DateTime @default(now())
+
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  product      Product   @relation(fields: [productId], references: [id])
+  supplier     Supplier? @relation(fields: [supplierId], references: [id])
+  stockLevels  StockLevel[]
+  saleItems    SaleItem[]
+  movements    StockMovement[]
+
+  @@index([tenantId, productId])
+  @@index([tenantId, expiryDate])
+  @@map("batches")
+}
+
+model StockLevel {
+  id        String  @id @default(uuid())
+  tenantId  String
+  productId String
+  batchId   String
+  branchId  String
+  quantity  Int     @default(0)
+
+  product   Product @relation(fields: [productId], references: [id])
+  batch     Batch   @relation(fields: [batchId], references: [id])
+  branch    Branch  @relation(fields: [branchId], references: [id])
+
+  @@unique([tenantId, productId, batchId, branchId])
+  @@map("stock_levels")
+}
+
+model StockMovement {
+  id            String   @id @default(uuid())
+  tenantId      String
+  productId     String
+  batchId       String?
+  branchId      String
+  movementType  String   // sale | purchase | transfer | adjustment | return | write_off
+  quantity      Int
+  referenceType String?  // Sale | Grn | Transfer | Adjustment
+  referenceId   String?
+  notes         String?
+  performedById String?
+  createdAt     DateTime @default(now())
+
+  product       Product  @relation(fields: [productId], references: [id])
+  batch         Batch?   @relation(fields: [batchId], references: [id])
+
+  @@index([tenantId, productId, createdAt])
+  @@index([tenantId, branchId, createdAt])
+  @@map("stock_movements")
+}
+
+// ─── POS MODULE ───────────────────────────────────────────────────────────────
+
+model Customer {
+  id             String   @id @default(uuid())
+  tenantId       String
+  name           String
+  cnic           String?  // Encrypted
+  phone          String?
+  email          String?
+  dateOfBirth    DateTime?
+  gender         String?
+  address        String?
+  // Medical
+  allergies      Json     @default("[]")
+  chronicConditions String?
+  // Credit
+  creditLimit    Decimal  @default(0) @db.Decimal(10, 2)
+  creditBalance  Decimal  @default(0) @db.Decimal(10, 2)
+  // Loyalty
+  loyaltyTier    String   @default("none")  // none | silver | gold | platinum
+  loyaltyPoints  Int      @default(0)
+  walletBalance  Decimal  @default(0) @db.Decimal(10, 2)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  sales          Sale[]
+  prescriptions  Prescription[]
+  loyaltyTxns    LoyaltyTransaction[]
+  deliveryOrders DeliveryOrder[]
+
+  @@index([tenantId, phone])
+  @@map("customers")
+}
+
+model Sale {
+  id                String   @id @default(uuid())
+  tenantId          String
+  branchId          String
+  // Client-side generated ID for idempotency (offline sync)
+  clientId          String   @unique
+  invoiceNumber     String
+  fbrInvoiceNumber  String?
+  fbrSyncStatus     String   @default("pending") // pending | success | failed | offline_pending
+  customerId        String?
+  prescriptionId    String?
+  cashierId         String
+  saleDate          DateTime @default(now())
+  subtotal          Decimal  @db.Decimal(10, 2)
+  discountAmount    Decimal  @default(0) @db.Decimal(10, 2)
+  taxAmount         Decimal  @default(0) @db.Decimal(10, 2)
+  total             Decimal  @db.Decimal(10, 2)
+  payments          Json     @default("[]") // [{method, amount}]
+  status            String   @default("completed")
+  notes             String?
+  createdAt         DateTime @default(now())
+
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  branch            Branch   @relation(fields: [branchId], references: [id])
+  customer          Customer? @relation(fields: [customerId], references: [id])
+  cashier           User     @relation(fields: [cashierId], references: [id])
+  items             SaleItem[]
+  fbrQueue          FbrSyncQueue[]
+  loyaltyTxns       LoyaltyTransaction[]
+  deliveryOrder     DeliveryOrder?
+
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId, branchId, saleDate])
+  @@index([tenantId, customerId])
+  @@map("sales")
+}
+
+model SaleItem {
+  id           String  @id @default(uuid())
+  saleId       String
+  productId    String
+  batchId      String?
+  quantity     Int
+  unitPrice    Decimal @db.Decimal(10, 2)
+  discount     Decimal @default(0) @db.Decimal(10, 2)
+  taxAmount    Decimal @default(0) @db.Decimal(10, 2)
+  lineTotal    Decimal @db.Decimal(10, 2)
+
+  sale         Sale    @relation(fields: [saleId], references: [id])
+  product      Product @relation(fields: [productId], references: [id])
+  batch        Batch?  @relation(fields: [batchId], references: [id])
+
+  @@map("sale_items")
+}
+
+model CashDrawer {
+  id           String   @id @default(uuid())
+  tenantId     String
+  branchId     String
+  openedById   String
+  closedById   String?
+  openingCash  Decimal  @db.Decimal(10, 2)
+  closingCash  Decimal? @db.Decimal(10, 2)
+  expectedCash Decimal? @db.Decimal(10, 2)
+  variance     Decimal? @db.Decimal(10, 2)
+  openedAt     DateTime @default(now())
+  closedAt     DateTime?
+  notes        String?
+
+  branch       Branch   @relation(fields: [branchId], references: [id])
+
+  @@map("cash_drawers")
+}
+
+// ─── FBR MODULE ───────────────────────────────────────────────────────────────
+
+model FbrSyncQueue {
+  id          String   @id @default(uuid())
+  tenantId    String
+  saleId      String
+  payload     Json
+  status      String   @default("pending") // pending | success | failed | offline_pending
+  attempts    Int      @default(0)
+  lastError   String?
+  fbrResponse Json?
+  syncedAt    DateTime?
+  createdAt   DateTime @default(now())
+  nextRetryAt DateTime?
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  sale        Sale     @relation(fields: [saleId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([nextRetryAt])
+  @@map("fbr_sync_queue")
+}
+
+// ─── PRESCRIPTIONS MODULE ────────────────────────────────────────────────────
+
+model Doctor {
+  id             String  @id @default(uuid())
+  tenantId       String
+  name           String
+  pmdcNumber     String?
+  specialization String?
+  clinicName     String?
+  phone          String?
+  isActive       Boolean @default(true)
+
+  prescriptions  Prescription[]
+
+  @@map("doctors")
+}
+
+model Prescription {
+  id             String   @id @default(uuid())
+  tenantId       String
+  customerId     String
+  doctorId       String?
+  branchId       String
+  issueDate      DateTime
+  expiryDate     DateTime?
+  diagnosis      String?
+  scanUrl        String?  // Scanned prescription image in R2
+  // partial | filled | expired | cancelled
+  status         String   @default("pending")
+  notes          String?
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  customer       Customer @relation(fields: [customerId], references: [id])
+  doctor         Doctor?  @relation(fields: [doctorId], references: [id])
+  items          PrescriptionItem[]
+
+  @@index([tenantId, customerId])
+  @@map("prescriptions")
+}
+
+model PrescriptionItem {
+  id             String  @id @default(uuid())
+  prescriptionId String
+  productId      String
+  qtyPrescribed  Int
+  qtyDispensed   Int     @default(0)
+  instructions   String?
+  isControlled   Boolean @default(false)
+
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id])
+
+  @@map("prescription_items")
+}
+
+model ControlledSubstanceLog {
+  id             String   @id @default(uuid())
+  tenantId       String
+  productId      String
+  customerId     String
+  customerCnic   String   // Required for Schedule X dispensing
+  doctorId       String?
+  doctorPmdc     String?
+  prescriptionId String?
+  quantity       Int
+  saleId         String?
+  dispensedById  String
+  dispensedAt    DateTime @default(now())
+  notes          String?
+
+  @@index([tenantId, productId, dispensedAt])
+  @@map("controlled_substance_logs")
+}
+
+// ─── DRUG INTERACTIONS MODULE ─────────────────────────────────────────────────
+
+model DrugInteraction {
+  id          String   @id @default(uuid())
+  drugAAtc    String   // ATC code of drug A
+  drugBAtc    String   // ATC code of drug B
+  severity    String   // contraindicated | major | moderate | minor
+  description String
+  mechanism   String?
+  management  String?
+  source      String?
+  updatedAt   DateTime @updatedAt
+
+  @@unique([drugAAtc, drugBAtc])
+  @@index([drugAAtc])
+  @@index([drugBAtc])
+  @@map("drug_interactions")
+}
+
+model InteractionOverride {
+  id            String   @id @default(uuid())
+  tenantId      String
+  saleId        String
+  productAId    String
+  productBId    String
+  severity      String
+  overriddenById String
+  reason        String
+  createdAt     DateTime @default(now())
+
+  @@map("interaction_overrides")
+}
+
+// ─── PURCHASING MODULE ────────────────────────────────────────────────────────
+
+model Supplier {
+  id            String   @id @default(uuid())
+  tenantId      String
+  name          String
+  ntn           String?
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  paymentTerms  Int      @default(30) // days
+  leadDays      Int      @default(7)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  purchaseOrders PurchaseOrder[]
+  batches       Batch[]
+
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id           String   @id @default(uuid())
+  tenantId     String
+  branchId     String
+  supplierId   String
+  poNumber     String
+  status       String   @default("draft") // draft | sent | partial | received | closed | cancelled
+  expectedDate DateTime?
+  approvedById String?
+  notes        String?
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  supplier     Supplier @relation(fields: [supplierId], references: [id])
+  items        PoItem[]
+  grns         Grn[]
+
+  @@unique([tenantId, poNumber])
+  @@map("purchase_orders")
+}
+
+model PoItem {
+  id           String  @id @default(uuid())
+  poId         String
+  productId    String
+  qtyOrdered   Int
+  qtyReceived  Int     @default(0)
+  unitCost     Decimal @db.Decimal(10, 2)
+  lineTotal    Decimal @db.Decimal(10, 2)
+
+  po           PurchaseOrder @relation(fields: [poId], references: [id])
+  product      Product       @relation(fields: [productId], references: [id])
+
+  @@map("po_items")
+}
+
+model Grn {
+  id                    String   @id @default(uuid())
+  tenantId              String
+  poId                  String?
+  branchId              String
+  supplierId            String
+  supplierInvoiceNumber String?
+  receivedDate          DateTime @default(now())
+  receivedById          String
+  status                String   @default("draft") // draft | posted
+  notes                 String?
+
+  branch                Branch   @relation(fields: [branchId], references: [id])
+  po                    PurchaseOrder? @relation(fields: [poId], references: [id])
+  items                 GrnItem[]
+
+  @@map("grns")
+}
+
+model GrnItem {
+  id          String  @id @default(uuid())
+  grnId       String
+  productId   String
+  batchId     String?
+  qtyReceived Int
+  costPerUnit Decimal @db.Decimal(10, 2)
+
+  grn         Grn     @relation(fields: [grnId], references: [id])
+
+  @@map("grn_items")
+}
+
+// ─── ACCOUNTS MODULE ──────────────────────────────────────────────────────────
+
+model Account {
+  id          String   @id @default(uuid())
+  tenantId    String
+  code        String
+  name        String
+  // asset | liability | equity | revenue | expense
+  accountType String
+  parentId    String?
+  parent      Account? @relation("AccountTree", fields: [parentId], references: [id])
+  children    Account[] @relation("AccountTree")
+  isSystem    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  journalLines JournalLine[]
+
+  @@unique([tenantId, code])
+  @@map("accounts")
+}
+
+model JournalEntry {
+  id            String   @id @default(uuid())
+  tenantId      String
+  entryDate     DateTime
+  referenceType String?  // Sale | Grn | PayrollRun | Manual
+  referenceId   String?
+  description   String
+  isPosted      Boolean  @default(false)
+  createdById   String
+  createdAt     DateTime @default(now())
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  lines         JournalLine[]
+
+  @@index([tenantId, entryDate])
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id             String       @id @default(uuid())
+  journalEntryId String
+  accountId      String
+  debit          Decimal      @default(0) @db.Decimal(12, 2)
+  credit         Decimal      @default(0) @db.Decimal(12, 2)
+  narration      String?
+
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id])
+  account        Account      @relation(fields: [accountId], references: [id])
+
+  @@map("journal_lines")
+}
+
+model BankAccount {
+  id            String   @id @default(uuid())
+  tenantId      String
+  accountId     String?  // Link to accounts chart
+  bankName      String
+  accountTitle  String
+  accountNumber String
+  iban          String?
+  branchCode    String?
+  openingBalance Decimal @default(0) @db.Decimal(12, 2)
+  isActive      Boolean  @default(true)
+
+  @@map("bank_accounts")
+}
+
+// ─── PAYROLL MODULE ───────────────────────────────────────────────────────────
+
+model Employee {
+  id              String   @id @default(uuid())
+  tenantId        String
+  branchId        String?
+  name            String
+  cnic            String?  // Encrypted
+  designation     String?
+  department      String?
+  phone           String?
+  email           String?
+  dateOfJoining   DateTime
+  dateOfLeaving   DateTime?
+  // Salary
+  basicSalary     Decimal  @db.Decimal(10, 2)
+  salaryComponents Json    @default("{}") // {houseRent, medical, conveyance, etc.}
+  // Bank
+  bankName        String?
+  bankAccount     String?
+  // Compliance
+  eobi            Boolean  @default(false)
+  sessi           Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  payrollItems    PayrollItem[]
+  attendanceRecords AttendanceRecord[]
+  leaveApplications LeaveApplication[]
+  leaveBalances   LeaveBalance[]
+
+  @@map("employees")
+}
+
+model AttendanceRecord {
+  id            String   @id @default(uuid())
+  tenantId      String
+  employeeId    String
+  branchId      String
+  date          DateTime @db.Date
+  checkIn       DateTime?
+  checkOut      DateTime?
+  // biometric | manual | system
+  source        String   @default("manual")
+  overtimeMinutes Int    @default(0)
+  isAbsent      Boolean  @default(false)
+  isLeave       Boolean  @default(false)
+  notes         String?
+
+  employee      Employee @relation(fields: [employeeId], references: [id])
+  branch        Branch   @relation(fields: [branchId], references: [id])
+
+  @@unique([tenantId, employeeId, date])
+  @@map("attendance_records")
+}
+
+model LeaveBalance {
+  id          String @id @default(uuid())
+  tenantId    String
+  employeeId  String
+  leaveType   String // annual | sick | casual | unpaid | maternity | paternity
+  year        Int
+  entitled    Int    @default(0)
+  taken       Int    @default(0)
+  pending     Int    @default(0)
+  remaining   Int    @default(0)
+
+  employee    Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([tenantId, employeeId, leaveType, year])
+  @@map("leave_balances")
+}
+
+model LeaveApplication {
+  id           String   @id @default(uuid())
+  tenantId     String
+  employeeId   String
+  leaveType    String
+  fromDate     DateTime @db.Date
+  toDate       DateTime @db.Date
+  days         Int
+  reason       String?
+  status       String   @default("pending") // pending | approved | rejected | cancelled
+  approvedById String?
+  approvedAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  employee     Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("leave_applications")
+}
+
+model PayrollRun {
+  id           String   @id @default(uuid())
+  tenantId     String
+  month        Int      // 1-12
+  year         Int
+  status       String   @default("draft") // draft | approved | paid
+  processedById String
+  approvedById String?
+  paidAt       DateTime?
+  createdAt    DateTime @default(now())
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  items        PayrollItem[]
+
+  @@unique([tenantId, month, year])
+  @@map("payroll_runs")
+}
+
+model PayrollItem {
+  id              String     @id @default(uuid())
+  payrollRunId    String
+  employeeId      String
+  workingDays     Int
+  presentDays     Int
+  overtimeHours   Decimal    @default(0) @db.Decimal(5, 2)
+  grossPay        Decimal    @db.Decimal(10, 2)
+  deductions      Json       @default("{}") // {incomeTax, eobi, loans, advances, etc.}
+  allowances      Json       @default("{}")
+  netPay          Decimal    @db.Decimal(10, 2)
+  bankTransferRef String?
+  isPaid          Boolean    @default(false)
+
+  payrollRun      PayrollRun @relation(fields: [payrollRunId], references: [id])
+  employee        Employee   @relation(fields: [employeeId], references: [id])
+
+  @@map("payroll_items")
+}
+
+// ─── NOTIFICATIONS MODULE ─────────────────────────────────────────────────────
+
+model NotificationTemplate {
+  id          String   @id @default(uuid())
+  tenantId    String
+  key         String   // prescription_ready | refill_reminder | low_balance | etc.
+  channel     String   // whatsapp | sms | email
+  subject     String?
+  body        String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, key, channel])
+  @@map("notification_templates")
+}
+
+model NotificationLog {
+  id            String   @id @default(uuid())
+  tenantId      String
+  recipientType String   // customer | employee
+  recipientId   String
+  channel       String
+  templateKey   String?
+  payload       Json
+  status        String   @default("queued") // queued | sent | delivered | failed
+  errorMessage  String?
+  externalId    String?  // Twilio/Meta message ID
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  createdAt     DateTime @default(now())
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, recipientId, createdAt])
+  @@map("notification_logs")
+}
+
+// ─── LOYALTY MODULE ───────────────────────────────────────────────────────────
+
+model LoyaltyProgram {
+  id               String   @id @default(uuid())
+  tenantId         String   @unique
+  pointsPerRupee   Decimal  @default(1) @db.Decimal(5, 2)
+  rupeePerPoint    Decimal  @default(1) @db.Decimal(5, 2) // redemption rate
+  pointsExpireDays Int?     // null = never expire
+  tierThresholds   Json     @default("{}")
+  isActive         Boolean  @default(true)
+
+  @@map("loyalty_programs")
+}
+
+model LoyaltyTransaction {
+  id           String   @id @default(uuid())
+  tenantId     String
+  customerId   String
+  saleId       String?
+  type         String   // earn | redeem | expire | adjust | signup_bonus
+  points       Int
+  balanceAfter Int
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  customer     Customer @relation(fields: [customerId], references: [id])
+  sale         Sale?    @relation(fields: [saleId], references: [id])
+
+  @@index([tenantId, customerId, createdAt])
+  @@map("loyalty_transactions")
+}
+
+// ─── DELIVERY MODULE ──────────────────────────────────────────────────────────
+
+model DeliveryRider {
+  id         String   @id @default(uuid())
+  tenantId   String
+  employeeId String?
+  name       String
+  phone      String
+  vehicleType String? // bike | car
+  isActive   Boolean  @default(true)
+
+  orders     DeliveryOrder[]
+
+  @@map("delivery_riders")
+}
+
+model DeliveryOrder {
+  id             String   @id @default(uuid())
+  tenantId       String
+  saleId         String   @unique
+  customerId     String
+  riderId        String?
+  address        Json     // {line1, city, lat, lng, instructions}
+  status         String   @default("placed") // placed | confirmed | dispatched | delivered | returned | cancelled
+  deliveryCharge Decimal  @default(0) @db.Decimal(8, 2)
+  dispatchedAt   DateTime?
+  deliveredAt    DateTime?
+  podUrl         String?  // Proof of delivery image
+  notes          String?
+  createdAt      DateTime @default(now())
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  sale           Sale     @relation(fields: [saleId], references: [id])
+  customer       Customer @relation(fields: [customerId], references: [id])
+  rider          DeliveryRider? @relation(fields: [riderId], references: [id])
+
+  @@index([tenantId, status])
+  @@map("delivery_orders")
+}
+
+// ─── DRUG SYNC MODULE ─────────────────────────────────────────────────────────
+
+// Global drug catalog fetched from external sources (OpenFDA, DRAP, DrugBank).
+// Not tenant-scoped — shared across all tenants.
+// Approved drugs get copied into the tenant's Product table.
+model PendingDrug {
+  id                String    @id @default(uuid())
+  source            String    @default("openfda") // openfda | drap | manual
+  externalId        String    // product_ndc or equivalent
+  name              String
+  genericName       String?
+  brandName         String?
+  manufacturer      String?
+  drugSchedule      String?   // OTC | Schedule H | Schedule X | Schedule C
+  isControlled      Boolean   @default(false)
+  isRxOnly          Boolean   @default(false)
+  atcCode           String?
+  dosageForm        String?
+  route             String?
+  activeIngredients Json?     // [{name, strength}]
+  pharmClass        String?
+  status            String    @default("pending") // pending | approved | rejected
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([source, externalId])
+  @@index([status])
+  @@map("pending_drugs")
+}
+
+model DrugSyncLog {
+  id          String    @id @default(uuid())
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  source      String    @default("openfda")
+  status      String    @default("running") // running | completed | failed
+  newFound    Int       @default(0)
+  updated     Int       @default(0)
+  errors      String?
+
+  @@map("drug_sync_logs")
+}
