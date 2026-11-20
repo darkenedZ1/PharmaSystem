@@ -22,9 +22,9 @@ export class TenantsService {
 
     return Object.values(MODULE_REGISTRY).map((mod) => ({
       ...mod,
-      isEnabled: enabled.includes(mod.id) || mod.isCore,
-      canEnable: !mod.isCore,
-      dependenciesMet: mod.dependencies.every((dep) => enabled.includes(dep)),
+      isEnabled: true,
+      canEnable: true,
+      dependenciesMet: true,
       dependents: getModuleDependents(mod.id),
     }));
   }

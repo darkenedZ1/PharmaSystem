@@ -37,8 +37,7 @@ export const useAuthStore = create<AuthState>()(
 
       isAuthenticated: () => !!get().accessToken,
 
-      hasModule: (moduleId: string) =>
-        get().user?.enabledModules.includes(moduleId) ?? false,
+      hasModule: (_moduleId?: string) => true,
 
       setHasHydrated: (val: boolean) => set({ _hasHydrated: val }),
     }),

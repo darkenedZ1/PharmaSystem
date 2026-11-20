@@ -1,4 +1,10 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
+import type { Metadata } from 'next';
+import { AnalyticsInventoryContent } from './analytics-inventory-content';
+
+export const metadata: Metadata = {
+  title: 'Inventory Analytics — SmartBiz Pro Pharmacy',
+};
+
 export default function AnalyticsInventoryPage() {
-  return <ComingSoon title="Inventory Reports" description="Stock movement, turnover rate, dead stock, and valuation reports." />;
+  return <AnalyticsInventoryContent />;
 }

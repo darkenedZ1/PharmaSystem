@@ -1,4 +1,9 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
+import { PayslipsContent } from './payslips-content';
+
+export const metadata = {
+  title: 'Employee Payslips — SmartBiz Pro Pharmacy',
+};
+
 export default function PayslipsPage() {
-  return <ComingSoon title="Payslips" description="Generate and send PDF payslips to employees via WhatsApp or email." />;
+  return <PayslipsContent />;
 }

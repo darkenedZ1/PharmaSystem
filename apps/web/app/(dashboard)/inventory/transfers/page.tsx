@@ -1,4 +1,10 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
+import type { Metadata } from 'next';
+import { TransfersContent } from './transfers-content';
+
+export const metadata: Metadata = {
+  title: 'Stock Transfers — SmartBiz Pro Pharmacy',
+};
+
 export default function StockTransfersPage() {
-  return <ComingSoon title="Stock Transfers" description="Transfer stock between branches with approval workflows and audit trail." />;
+  return <TransfersContent />;
 }

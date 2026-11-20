@@ -1,4 +1,9 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
+import { PayablesContent } from './payables-content';
+
+export const metadata = {
+  title: 'Accounts Payable — SmartBiz Pro Pharmacy',
+};
+
 export default function AccountsPayablesPage() {
-  return <ComingSoon title="Payables" description="View and manage all supplier payables linked to purchase orders." />;
+  return <PayablesContent />;
 }

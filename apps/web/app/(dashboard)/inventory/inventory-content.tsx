@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { AlertTriangle, Package, Search } from 'lucide-react';
 
@@ -23,7 +24,7 @@ export function InventoryContent() {
     <div className="p-6">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">Inventory</h1>
-        <button className="btn-primary">+ Add Product</button>
+        <Link href="/inventory/products" className="btn-primary">+ Add Product</Link>
       </div>
 
       {/* Tabs */}

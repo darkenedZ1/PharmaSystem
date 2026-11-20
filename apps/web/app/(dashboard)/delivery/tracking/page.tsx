@@ -1,4 +1,10 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
+import type { Metadata } from 'next';
+import { TrackingContent } from './tracking-content';
+
+export const metadata: Metadata = {
+  title: 'Live Delivery Tracking — SmartBiz Pro Pharmacy',
+};
+
 export default function LiveTrackingPage() {
-  return <ComingSoon title="Live Tracking" description="Real-time GPS tracking for active deliveries with customer notification links." />;
+  return <TrackingContent />;
 }

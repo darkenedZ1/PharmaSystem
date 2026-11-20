@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { Receipt } from 'lucide-react';
+import { Receipt, Printer } from 'lucide-react';
+import { ThermalReceiptModal, type ThermalReceiptData } from '@/components/pos/thermal-receipt-modal';
 
 interface Sale {
   id: string;
@@ -34,8 +35,30 @@ export function SalesHistoryContent() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Sale | null>(null);
+  const [thermalReceipt, setThermalReceipt] = useState<ThermalReceiptData | null>(null);
   const [from, setFrom] = useState(() => new Date().toISOString().slice(0, 10));
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const openThermal = (sale: Sale) => {
+    setThermalReceipt({
+      invoiceNumber: sale.invoiceNumber,
+      date: sale.saleDate,
+      cashierName: sale.cashier?.name || 'Cashier',
+      customerName: sale.customer?.name ?? 'Walk-in Customer',
+      customerPhone: sale.customer?.phone ?? undefined,
+      items: (sale.items || []).map((i) => ({
+        name: i.product?.name || 'Item',
+        quantity: i.quantity,
+        unitPrice: Number(i.unitPrice),
+        lineTotal: Number(i.lineTotal),
+      })),
+      subtotal: Number(sale.total) - Number(sale.taxAmount || 0) + Number(sale.discountAmount || 0),
+      discountAmount: Number(sale.discountAmount || 0),
+      taxAmount: Number(sale.taxAmount || 0),
+      total: Number(sale.total),
+      payments: sale.payments || [{ method: 'cash', amount: Number(sale.total) }],
+    });
+  };
 
   const load = async () => {
     setLoading(true);
@@ -93,6 +116,7 @@ export function SalesHistoryContent() {
                 <th className="px-4 py-3">Total</th>
                 <th className="px-4 py-3">FBR</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Receipt</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -113,6 +137,15 @@ export function SalesHistoryContent() {
                   </td>
                   <td className="px-4 py-3">
                     <span className={sale.status === 'voided' ? 'badge-red' : 'badge-green'}>{sale.status}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => openThermal(sale)}
+                      title="Print 80mm/58mm Thermal Receipt"
+                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded"
+                    >
+                      <Printer size={13} /> Print
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -168,11 +201,24 @@ export function SalesHistoryContent() {
               ))}
             </div>
 
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 flex items-center justify-between">
+              <button
+                onClick={() => openThermal(selected)}
+                className="btn-secondary inline-flex items-center gap-1.5 text-xs"
+              >
+                <Printer size={14} /> Print Thermal (80mm / 58mm)
+              </button>
               <button onClick={() => setSelected(null)} className="btn-ghost">Close</button>
             </div>
           </div>
         </div>
+      )}
+
+      {thermalReceipt && (
+        <ThermalReceiptModal
+          receipt={thermalReceipt}
+          onClose={() => setThermalReceipt(null)}
+        />
       )}
     </div>
   );

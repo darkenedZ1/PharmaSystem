@@ -1,4 +1,9 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
+import { ReturnsContent } from './returns-content';
+
+export const metadata = {
+  title: 'Purchase Returns (RTV) — SmartBiz Pro Pharmacy',
+};
+
 export default function SupplierReturnsPage() {
-  return <ComingSoon title="Returns to Supplier" description="Manage return-to-supplier for expired, damaged, or excess stock with debit notes." />;
+  return <ReturnsContent />;
 }

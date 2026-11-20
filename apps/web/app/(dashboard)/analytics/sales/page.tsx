@@ -1,4 +1,10 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
+import type { Metadata } from 'next';
+import { AnalyticsSalesContent } from './analytics-sales-content';
+
+export const metadata: Metadata = {
+  title: 'Sales Analytics — SmartBiz Pro Pharmacy',
+};
+
 export default function AnalyticsSalesPage() {
-  return <ComingSoon title="Sales Reports" description="Detailed sales breakdowns by product, cashier, branch, payment method, and date range." />;
+  return <AnalyticsSalesContent />;
 }

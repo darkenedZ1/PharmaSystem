@@ -5,6 +5,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class DrugInteractionsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async listAll() {
+    return this.prisma.drugInteraction.findMany({
+      orderBy: { severity: 'desc' },
+      take: 100,
+    });
+  }
+
   async checkByProductIds(tenantId: string, productIds: string[]) {
     const products = await this.prisma.product.findMany({
       where: { tenantId, id: { in: productIds } },

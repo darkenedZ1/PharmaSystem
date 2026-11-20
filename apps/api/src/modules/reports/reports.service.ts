@@ -12,7 +12,7 @@ export class ReportsService {
     const thirtyDays = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const ninetyDays = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
 
-    const [todaySales, monthSales, totalSales, lowStockCount, nearExpiry30, nearExpiry90, pendingPOs] =
+    const [todaySales, monthSales, totalSales, lowStockProducts, nearExpiry30, nearExpiry90, pendingPOs] =
       await Promise.all([
         this.prisma.sale.aggregate({
           where: { tenantId, status: 'completed', saleDate: { gte: today } },
@@ -28,8 +28,9 @@ export class ReportsService {
           where: { tenantId, status: 'completed' },
           _sum: { total: true },
         }),
-        this.prisma.product.count({
-          where: { tenantId, isActive: true, stockLevels: { none: { quantity: { gt: 0 } } } },
+        this.prisma.product.findMany({
+          where: { tenantId, isActive: true, reorderPoint: { gt: 0 } },
+          select: { reorderPoint: true, stockLevels: { select: { quantity: true } } },
         }),
         this.prisma.batch.count({
           where: { tenantId, expiryDate: { lte: thirtyDays, gt: new Date() }, stockLevels: { some: { quantity: { gt: 0 } } } },
@@ -41,6 +42,10 @@ export class ReportsService {
           where: { tenantId, status: { in: ['draft', 'sent'] } },
         }),
       ]);
+
+    const lowStockCount = lowStockProducts.filter(
+      (p) => p.stockLevels.reduce((s, l) => s + l.quantity, 0) <= p.reorderPoint,
+    ).length;
 
     return {
       today: {
@@ -56,6 +61,7 @@ export class ReportsService {
       },
       alerts: {
         lowStock: lowStockCount,
+        nearExpiry: nearExpiry90,
         nearExpiry30Days: nearExpiry30,
         nearExpiry90Days: nearExpiry90,
         pendingPOs,

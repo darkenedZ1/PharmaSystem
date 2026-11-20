@@ -1,4 +1,9 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
-export default function ReceivablesPage() {
-  return <ComingSoon title="Receivables" description="Track outstanding customer balances, aging reports, and collection follow-ups." />;
+import { ReceivablesContent } from './receivables-content';
+
+export const metadata = {
+  title: 'Accounts Receivable — SmartBiz Pro Pharmacy',
+};
+
+export default function AccountsReceivablesPage() {
+  return <ReceivablesContent />;
 }

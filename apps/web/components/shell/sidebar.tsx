@@ -19,7 +19,7 @@ import {
   Activity, Flag, Megaphone, Wallet, Star, Sliders, Clock,
 } from 'lucide-react';
 
-const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+const ICON_MAP: Record<string, React.ComponentType<{ size?: number | string; className?: string }>> = {
   LayoutDashboard, Settings, Package, ShoppingCart, BadgeCheck,
   Truck, FileText, ShieldAlert, Calculator, UserCheck, BarChart2,
   MessageSquare, Gift, MapPin, Crown, Shield, Users,

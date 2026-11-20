@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { queueOfflineSale, searchOfflineProducts } from '@/lib/offline/db';
 import { toast } from 'sonner';
-import { Trash2, Search, Plus, Minus, WifiOff } from 'lucide-react';
+import { Trash2, Search, Plus, Minus, WifiOff, Printer } from 'lucide-react';
+import { ThermalReceiptModal, type ThermalReceiptData } from '@/components/pos/thermal-receipt-modal';
 
 interface CartItem {
   productId: string;
@@ -23,7 +24,16 @@ export function PosTerminal() {
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [processing, setProcessing] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
+  const [completedReceipt, setCompletedReceipt] = useState<ThermalReceiptData | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    api.get('/users/branches').then((res) => {
+      const bList = res.data || [];
+      if (bList.length > 0) setSelectedBranchId(bList[0].id);
+    }).catch(() => {});
+  }, []);
 
   const handleSearch = useCallback(async (q: string) => {
     setSearch(q);
@@ -83,7 +93,7 @@ export function PosTerminal() {
 
     const payload = {
       clientId: crypto.randomUUID(),
-      branchId: user?.tenantId ?? '', // simplified — real app uses selected branchId
+      branchId: selectedBranchId,
       items: cart.map((i) => ({
         productId: i.productId,
         quantity: i.quantity,
@@ -94,8 +104,25 @@ export function PosTerminal() {
 
     try {
       if (isOnline) {
-        await api.post('/pos/sales', payload);
+        const res = await api.post('/pos/sales', payload);
         toast.success(`Sale completed — PKR ${total.toFixed(0)}`);
+        setCompletedReceipt({
+          invoiceNumber: res.data?.invoiceNumber || `INV-${new Date().getTime().toString().slice(-6)}`,
+          fbrInvoiceNumber: res.data?.fbrInvoiceNumber,
+          date: res.data?.saleDate || new Date().toISOString(),
+          cashierName: user?.name || 'Cashier',
+          customerName: 'Walk-in Customer',
+          items: cart.map((i) => ({
+            name: i.name,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+            lineTotal: i.quantity * i.unitPrice,
+          })),
+          subtotal,
+          taxAmount: tax,
+          total,
+          payments: [{ method: paymentMethod, amount: total }],
+        });
       } else {
         await queueOfflineSale(user?.tenantId ?? '', payload.branchId, payload);
         toast.info('Offline sale saved — will sync when internet returns', { icon: <WifiOff size={16} /> });
@@ -267,6 +294,13 @@ export function PosTerminal() {
           )}
         </div>
       </div>
+
+      {completedReceipt && (
+        <ThermalReceiptModal
+          receipt={completedReceipt}
+          onClose={() => setCompletedReceipt(null)}
+        />
+      )}
     </div>
   );
 }

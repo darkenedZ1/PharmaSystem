@@ -14,13 +14,21 @@ import { DrugInteractionsService } from './drug-interactions.service';
 export class DrugInteractionsController {
   constructor(private readonly drugInteractionsService: DrugInteractionsService) {}
 
+  @Get()
+  @ApiOperation({ summary: 'List all drug interactions in database' })
+  async listAll() {
+    return this.drugInteractionsService.listAll();
+  }
+
   @Get('check')
   @ApiOperation({ summary: 'Check drug interactions by product IDs' })
   async checkByProductIds(
     @CurrentUser() user: JwtPayload,
-    @Query('productIds') productIdsParam: string,
+    @Query('productIds') productIdsParam?: string,
   ) {
+    if (!productIdsParam) return [];
     const productIds = productIdsParam.split(',').map((id) => id.trim()).filter(Boolean);
+    if (productIds.length < 2) return [];
     return this.drugInteractionsService.checkByProductIds(user.tenantId, productIds);
   }
 
@@ -28,9 +36,11 @@ export class DrugInteractionsController {
   @ApiOperation({ summary: 'Check drug interactions by ATC codes' })
   async checkByAtcCodes(
     @CurrentUser() _user: JwtPayload,
-    @Query('atcCodes') atcCodesParam: string,
+    @Query('atcCodes') atcCodesParam?: string,
   ) {
+    if (!atcCodesParam) return [];
     const atcCodes = atcCodesParam.split(',').map((c) => c.trim()).filter(Boolean);
+    if (atcCodes.length < 2) return [];
     return this.drugInteractionsService.checkByAtcCodes(atcCodes);
   }
 

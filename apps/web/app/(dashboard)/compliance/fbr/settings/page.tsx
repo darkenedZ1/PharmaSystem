@@ -1,4 +1,10 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
+import type { Metadata } from 'next';
+import { FbrSettingsContent } from './fbr-settings-content';
+
+export const metadata: Metadata = {
+  title: 'FBR POS Settings — SmartBiz Pro Pharmacy',
+};
+
 export default function FbrSettingsPage() {
-  return <ComingSoon title="FBR Settings" description="Configure FBR POS ID, invoice prefix, and real-time vs. deferred sync mode." />;
+  return <FbrSettingsContent />;
 }

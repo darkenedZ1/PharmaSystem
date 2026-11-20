@@ -267,6 +267,183 @@ export class PurchasingService {
     });
   }
 
+  // ── Purchase Returns (RTV) ──────────────────────────────────────────────────
+
+  async listReturns(tenantId: string, status?: string) {
+    return this.prisma.purchaseReturn.findMany({
+      where: {
+        tenantId,
+        ...(status && { status }),
+      },
+      include: {
+        supplier: { select: { id: true, name: true, phone: true } },
+        items: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async getReturn(tenantId: string, id: string) {
+    const ret = await this.prisma.purchaseReturn.findFirst({
+      where: { id, tenantId },
+      include: {
+        supplier: true,
+        items: true,
+      },
+    });
+    if (!ret) throw new NotFoundException('Purchase return not found');
+    return ret;
+  }
+
+  async createReturn(
+    tenantId: string,
+    userId: string,
+    dto: {
+      supplierId: string;
+      branchId: string;
+      reason: string;
+      refundMethod?: string;
+      notes?: string;
+      items: {
+        productId: string;
+        batchId?: string;
+        batchNumber?: string;
+        quantity: number;
+        unitCost: number;
+        reason?: string;
+      }[];
+    },
+  ) {
+    if (!dto.items || dto.items.length === 0) {
+      throw new BadRequestException('At least one item must be returned');
+    }
+
+    const supplier = await this.prisma.supplier.findFirst({
+      where: { id: dto.supplierId, tenantId },
+    });
+    if (!supplier) throw new NotFoundException('Supplier not found');
+
+    const returnNumber = await this.generateReturnNumber(tenantId);
+    const refundMethod = dto.refundMethod || 'credit_note';
+    const totalAmount = dto.items.reduce((s, i) => s + i.quantity * i.unitCost, 0);
+
+    return this.prisma.$transaction(async (tx) => {
+      const purchaseReturn = await tx.purchaseReturn.create({
+        data: {
+          tenantId,
+          branchId: dto.branchId,
+          supplierId: dto.supplierId,
+          returnNumber,
+          status: 'completed',
+          reason: dto.reason,
+          refundMethod,
+          totalAmount,
+          notes: dto.notes,
+          createdById: userId,
+          items: {
+            create: dto.items.map((i) => ({
+              productId: i.productId,
+              batchId: i.batchId,
+              batchNumber: i.batchNumber,
+              quantity: i.quantity,
+              unitCost: i.unitCost,
+              lineTotal: i.quantity * i.unitCost,
+              reason: i.reason || dto.reason,
+            })),
+          },
+        },
+        include: { items: true, supplier: true },
+      });
+
+      // Deduct stock for each returned item
+      for (const item of dto.items) {
+        if (item.batchId) {
+          await tx.stockLevel.updateMany({
+            where: {
+              tenantId,
+              productId: item.productId,
+              batchId: item.batchId,
+              branchId: dto.branchId,
+            },
+            data: { quantity: { decrement: item.quantity } },
+          });
+
+          await tx.stockMovement.create({
+            data: {
+              tenantId,
+              productId: item.productId,
+              batchId: item.batchId,
+              branchId: dto.branchId,
+              movementType: 'return',
+              quantity: -item.quantity,
+              referenceType: 'PurchaseReturn',
+              referenceId: purchaseReturn.id,
+              performedById: userId,
+            },
+          });
+        }
+      }
+
+      // Record Accounting Journal Entry (reduces Accounts Payable liability & Inventory asset)
+      const apAccount = await tx.account.findFirst({ where: { tenantId, code: '2000' } });
+      const inventoryAccount = await tx.account.findFirst({ where: { tenantId, code: '1300' } });
+      const cashAccount = await tx.account.findFirst({ where: { tenantId, code: '1000' } });
+
+      const debitAccountId = refundMethod === 'cash' && cashAccount ? cashAccount.id : apAccount?.id;
+
+      if (debitAccountId && inventoryAccount && totalAmount > 0) {
+        await tx.journalEntry.create({
+          data: {
+            tenantId,
+            entryDate: new Date(),
+            description: `RTV ${returnNumber}: Return to ${supplier.name} (${dto.reason})`,
+            referenceType: 'PurchaseReturn',
+            referenceId: purchaseReturn.id,
+            createdById: userId,
+            isPosted: true,
+            lines: {
+              create: [
+                {
+                  accountId: debitAccountId,
+                  debit: totalAmount,
+                  credit: 0,
+                  narration: `Debit AP/Cash on return to ${supplier.name}`,
+                },
+                {
+                  accountId: inventoryAccount.id,
+                  debit: 0,
+                  credit: totalAmount,
+                  narration: `Credit inventory value for return ${returnNumber}`,
+                },
+              ],
+            },
+          },
+        });
+      }
+
+      return purchaseReturn;
+    });
+  }
+
+  async cancelReturn(tenantId: string, id: string) {
+    const ret = await this.prisma.purchaseReturn.findFirst({ where: { id, tenantId } });
+    if (!ret) throw new NotFoundException('Purchase return not found');
+    if (ret.status === 'completed') {
+      throw new BadRequestException('Cannot cancel an already completed purchase return');
+    }
+    return this.prisma.purchaseReturn.update({
+      where: { id },
+      data: { status: 'cancelled' },
+    });
+  }
+
+  private async generateReturnNumber(tenantId: string): Promise<string> {
+    const count = await this.prisma.purchaseReturn.count({ where: { tenantId } });
+    const year = new Date().getFullYear();
+    return `RTV-${year}-${String(count + 1).padStart(4, '0')}`;
+  }
+
   private async generatePoNumber(tenantId: string): Promise<string> {
     const count = await this.prisma.purchaseOrder.count({ where: { tenantId } });
     const year = new Date().getFullYear();

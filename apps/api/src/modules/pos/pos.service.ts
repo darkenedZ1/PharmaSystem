@@ -41,22 +41,42 @@ export class PosService {
     });
     if (existing) return existing;
 
+    // Resolve valid branch
+    let branch = await this.prisma.branch.findFirst({
+      where: { id: dto.branchId, tenantId },
+    });
+    if (!branch) {
+      branch = await this.prisma.branch.findFirst({
+        where: { tenantId, isActive: true },
+      });
+    }
+    if (!branch) {
+      branch = await this.prisma.branch.create({
+        data: {
+          tenantId,
+          name: 'Main Branch',
+          address: 'Main Store',
+        },
+      });
+    }
+    const branchId = branch.id;
+
     // Validate stock availability (FEFO — pick earliest expiring batch first)
-    const resolvedItems = await this.resolveItemBatches(tenantId, dto.branchId, dto.items);
+    const resolvedItems = await this.resolveItemBatches(tenantId, branchId, dto.items);
 
     const subtotal = resolvedItems.reduce((s, i) => s + i.lineTotal, 0);
     const discountAmount = dto.discountAmount ?? 0;
     const taxAmount = resolvedItems.reduce((s, i) => s + i.taxAmount, 0);
     const total = subtotal - discountAmount + taxAmount;
 
-    const invoiceNumber = await this.generateInvoiceNumber(tenantId, dto.branchId);
+    const invoiceNumber = await this.generateInvoiceNumber(tenantId, branchId);
 
     const sale = await this.prisma.$transaction(async (tx) => {
       const s = await tx.sale.create({
         data: {
           clientId: dto.clientId,
           tenantId,
-          branchId: dto.branchId,
+          branchId,
           customerId: dto.customerId,
           prescriptionId: dto.prescriptionId,
           cashierId,
@@ -87,7 +107,7 @@ export class PosService {
       for (const item of resolvedItems) {
         if (item.batchId) {
           await tx.stockLevel.updateMany({
-            where: { tenantId, productId: item.productId, batchId: item.batchId, branchId: dto.branchId },
+            where: { tenantId, productId: item.productId, batchId: item.batchId, branchId },
             data: { quantity: { decrement: item.quantity } },
           });
         }
@@ -97,7 +117,7 @@ export class PosService {
             tenantId,
             productId: item.productId,
             batchId: item.batchId,
-            branchId: dto.branchId,
+            branchId,
             movementType: 'sale',
             quantity: -item.quantity,
             referenceType: 'Sale',
@@ -142,6 +162,25 @@ export class PosService {
       orderBy: { saleDate: 'desc' },
       take: 100,
     });
+  }
+
+  async getSale(tenantId: string, id: string) {
+    const sale = await this.prisma.sale.findFirst({
+      where: { id, tenantId },
+      include: {
+        items: {
+          include: {
+            product: { select: { name: true, genericName: true, drapNumber: true } },
+            batch: { select: { batchNumber: true, expiryDate: true } },
+          },
+        },
+        customer: { select: { name: true, phone: true, cnic: true } },
+        cashier: { select: { name: true } },
+        branch: { select: { name: true, address: true, phone: true } },
+      },
+    });
+    if (!sale) throw new NotFoundException('Sale not found');
+    return sale;
   }
 
   async voidSale(tenantId: string, saleId: string, reason: string, userId: string) {
@@ -246,5 +285,91 @@ export class PosService {
     });
 
     return `${prefix}-${String(count + 1).padStart(4, '0')}`;
+  }
+
+  async getCurrentDrawer(tenantId: string) {
+    const drawer = await this.prisma.cashDrawer.findFirst({
+      where: { tenantId, closedAt: null },
+      orderBy: { openedAt: 'desc' },
+    });
+
+    if (!drawer) return null;
+
+    const sales = await this.prisma.sale.aggregate({
+      where: {
+        tenantId,
+        saleDate: { gte: drawer.openedAt },
+        status: 'completed',
+      },
+      _sum: { total: true },
+    });
+
+    const salesTotal = Number(sales._sum.total ?? 0);
+    const openingCash = Number(drawer.openingCash);
+
+    return {
+      id: drawer.id,
+      status: 'open',
+      openingCash,
+      salesTotal,
+      expectedCash: openingCash + salesTotal,
+      openedAt: drawer.openedAt.toISOString(),
+      openedBy: drawer.openedById,
+    };
+  }
+
+  async openDrawer(tenantId: string, userId: string, openingCash: number) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const branch = await this.prisma.branch.findFirst({ where: { tenantId } });
+    const branchId = user?.branchId || branch?.id;
+
+    if (!branchId) throw new BadRequestException('Branch not found');
+
+    const active = await this.prisma.cashDrawer.findFirst({
+      where: { tenantId, closedAt: null },
+    });
+    if (active) throw new BadRequestException('A cash drawer is already open');
+
+    return this.prisma.cashDrawer.create({
+      data: {
+        tenantId,
+        branchId,
+        openedById: userId,
+        openingCash,
+      },
+    });
+  }
+
+  async closeDrawer(tenantId: string, userId: string, closingCash: number, notes?: string) {
+    const active = await this.prisma.cashDrawer.findFirst({
+      where: { tenantId, closedAt: null },
+      orderBy: { openedAt: 'desc' },
+    });
+    if (!active) throw new NotFoundException('No open cash drawer found');
+
+    const sales = await this.prisma.sale.aggregate({
+      where: {
+        tenantId,
+        saleDate: { gte: active.openedAt },
+        status: 'completed',
+      },
+      _sum: { total: true },
+    });
+
+    const salesTotal = Number(sales._sum.total ?? 0);
+    const expectedCash = Number(active.openingCash) + salesTotal;
+    const variance = closingCash - expectedCash;
+
+    return this.prisma.cashDrawer.update({
+      where: { id: active.id },
+      data: {
+        closedById: userId,
+        closedAt: new Date(),
+        closingCash,
+        expectedCash,
+        variance,
+        notes,
+      },
+    });
   }
 }

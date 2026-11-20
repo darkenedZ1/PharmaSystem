@@ -523,6 +523,7 @@ model Supplier {
   tenant        Tenant   @relation(fields: [tenantId], references: [id])
   purchaseOrders PurchaseOrder[]
   batches       Batch[]
+  purchaseReturns PurchaseReturn[]
 
   @@map("suppliers")
 }
@@ -595,6 +596,76 @@ model GrnItem {
   grn         Grn     @relation(fields: [grnId], references: [id])
 
   @@map("grn_items")
+}
+
+model PurchaseReturn {
+  id           String   @id @default(uuid())
+  tenantId     String
+  branchId     String
+  supplierId   String
+  returnNumber String
+  status       String   @default("draft") // draft | approved | completed | cancelled
+  reason       String   @default("expired") // expired | damaged | recalled | overstocked | wrong_item
+  refundMethod String   @default("credit_note") // credit_note | cash | bank_transfer
+  totalAmount  Decimal  @default(0) @db.Decimal(10, 2)
+  notes        String?
+  returnDate   DateTime @default(now())
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  supplier     Supplier @relation(fields: [supplierId], references: [id])
+  items        PurchaseReturnItem[]
+
+  @@unique([tenantId, returnNumber])
+  @@map("purchase_returns")
+}
+
+model PurchaseReturnItem {
+  id               String         @id @default(uuid())
+  purchaseReturnId String
+  productId        String
+  batchId          String?
+  batchNumber      String?
+  quantity         Int
+  unitCost         Decimal        @db.Decimal(10, 2)
+  lineTotal        Decimal        @db.Decimal(10, 2)
+  reason           String?
+
+  purchaseReturn   PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_return_items")
+}
+
+model StockTransfer {
+  id             String   @id @default(uuid())
+  tenantId       String
+  transferNumber String
+  sourceBranchId String
+  targetBranchId String
+  status         String   @default("draft") // draft | in_transit | completed | cancelled
+  notes          String?
+  createdById    String
+  dispatchedAt   DateTime?
+  receivedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  items          StockTransferItem[]
+
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id         String   @id @default(uuid())
+  transferId String
+  productId  String
+  batchId    String
+  quantity   Int
+
+  transfer   StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  @@map("stock_transfer_items")
 }
 
 // ─── ACCOUNTS MODULE ──────────────────────────────────────────────────────────

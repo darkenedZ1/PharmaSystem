@@ -1,4 +1,9 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
+import { BalanceSheetContent } from './balance-sheet-content';
+
+export const metadata = {
+  title: 'Balance Sheet — SmartBiz Pro Pharmacy',
+};
+
 export default function BalanceSheetPage() {
-  return <ComingSoon title="Balance Sheet" description="Assets, liabilities, and equity summary generated from your journal entries." />;
+  return <BalanceSheetContent />;
 }

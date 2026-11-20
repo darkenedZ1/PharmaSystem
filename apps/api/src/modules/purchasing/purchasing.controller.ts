@@ -80,4 +80,29 @@ export class PurchasingController {
   createGrn(@CurrentUser() user: JwtPayload, @Body() body: any) {
     return this.purchasingService.createGrn(user.tenantId, user.sub, body);
   }
+
+  // ── Purchase Returns (RTV) ──────────────────────────────────────────────────
+
+  @Get('returns')
+  listReturns(
+    @CurrentUser() user: JwtPayload,
+    @Query('status') status?: string,
+  ) {
+    return this.purchasingService.listReturns(user.tenantId, status);
+  }
+
+  @Get('returns/:id')
+  getReturn(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.purchasingService.getReturn(user.tenantId, id);
+  }
+
+  @Post('returns')
+  createReturn(@CurrentUser() user: JwtPayload, @Body() body: any) {
+    return this.purchasingService.createReturn(user.tenantId, user.sub, body);
+  }
+
+  @Post('returns/:id/cancel')
+  cancelReturn(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.purchasingService.cancelReturn(user.tenantId, id);
+  }
 }

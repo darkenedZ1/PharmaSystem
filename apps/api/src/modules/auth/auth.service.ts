@@ -95,7 +95,8 @@ export class AuthService {
       throw new UnauthorizedException('Account suspended. Contact support.');
     }
 
-    const tokens = await this.generateTokens(user, user.tenant.enabledModules as ModuleId[]);
+    const allModules = Object.keys(MODULE_REGISTRY) as ModuleId[];
+    const tokens = await this.generateTokens(user, allModules);
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -110,7 +111,7 @@ export class AuthService {
         email: user.email,
         roleId: user.roleId,
         tenantId: user.tenantId,
-        enabledModules: user.tenant.enabledModules,
+        enabledModules: allModules,
       },
     };
   }
@@ -131,9 +132,10 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
+    const allModules = Object.keys(MODULE_REGISTRY) as ModuleId[];
     return this.generateTokens(
       tokenRecord.user,
-      tokenRecord.user.tenant.enabledModules as ModuleId[],
+      allModules,
     );
   }
 

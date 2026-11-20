@@ -73,4 +73,16 @@ export class DeliveryController {
   ) {
     return this.deliveryService.updateRider(user.tenantId, id, body);
   }
+
+  @Get('zones')
+  @ApiOperation({ summary: 'Get configured delivery zones & pricing' })
+  getZones(@CurrentUser() user: JwtPayload) {
+    return this.deliveryService.getZones(user.tenantId);
+  }
+
+  @Put('zones')
+  @ApiOperation({ summary: 'Update delivery zones & pricing configuration' })
+  saveZones(@CurrentUser() user: JwtPayload, @Body() body: any[]) {
+    return this.deliveryService.saveZones(user.tenantId, body);
+  }
 }

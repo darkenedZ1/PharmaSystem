@@ -47,6 +47,12 @@ export class PosController {
     );
   }
 
+  @Get('sales/:id')
+  @ApiOperation({ summary: 'Get single sale details' })
+  getSale(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.posService.getSale(user.tenantId, id);
+  }
+
   @Post('sales/:id/void')
   @ApiOperation({ summary: 'Void a completed sale (requires supervisor)' })
   voidSale(
@@ -55,5 +61,27 @@ export class PosController {
     @Body('reason') reason: string,
   ) {
     return this.posService.voidSale(user.tenantId, saleId, reason, user.sub);
+  }
+
+  @Get('cash-drawer/current')
+  @ApiOperation({ summary: 'Get current active cash drawer' })
+  getCurrentDrawer(@CurrentUser() user: JwtPayload) {
+    return this.posService.getCurrentDrawer(user.tenantId);
+  }
+
+  @Post('cash-drawer/open')
+  @ApiOperation({ summary: 'Open a cash drawer' })
+  openDrawer(@CurrentUser() user: JwtPayload, @Body('openingCash') openingCash: number) {
+    return this.posService.openDrawer(user.tenantId, user.sub, Number(openingCash));
+  }
+
+  @Post('cash-drawer/close')
+  @ApiOperation({ summary: 'Close the current cash drawer' })
+  closeDrawer(
+    @CurrentUser() user: JwtPayload,
+    @Body('closingCash') closingCash: number,
+    @Body('notes') notes?: string,
+  ) {
+    return this.posService.closeDrawer(user.tenantId, user.sub, Number(closingCash), notes);
   }
 }

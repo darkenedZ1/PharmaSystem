@@ -1,4 +1,9 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
+import { BankContent } from './bank-content';
+
+export const metadata = {
+  title: 'Bank Accounts — SmartBiz Pro Pharmacy',
+};
+
 export default function BankAccountsPage() {
-  return <ComingSoon title="Bank Accounts" description="Link bank accounts, record receipts and payments, and reconcile statements." />;
+  return <BankContent />;
 }

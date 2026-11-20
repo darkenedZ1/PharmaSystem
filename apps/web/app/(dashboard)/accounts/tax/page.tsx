@@ -1,4 +1,10 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
+import type { Metadata } from 'next';
+import { TaxContent } from './tax-content';
+
+export const metadata: Metadata = {
+  title: 'Tax Summary & Filings — SmartBiz Pro Pharmacy',
+};
+
 export default function TaxSummaryPage() {
-  return <ComingSoon title="Tax Summary" description="FBR sales tax, withholding tax, and income tax summary for filings." />;
+  return <TaxContent />;
 }

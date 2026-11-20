@@ -72,4 +72,69 @@ export class AccountsController {
   getTrialBalance(@CurrentUser() user: JwtPayload) {
     return this.accountsService.getTrialBalance(user.tenantId);
   }
+
+  @Get('balance-sheet')
+  getBalanceSheet(
+    @CurrentUser() user: JwtPayload,
+    @Query('asOf') asOf?: string,
+  ) {
+    return this.accountsService.getBalanceSheet(
+      user.tenantId,
+      asOf ? new Date(asOf) : undefined,
+    );
+  }
+
+  @Get('tax-summary')
+  getTaxSummary(
+    @CurrentUser() user: JwtPayload,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.accountsService.getTaxSummary(
+      user.tenantId,
+      from ? new Date(from) : undefined,
+      to ? new Date(to) : undefined,
+    );
+  }
+
+  @Get('payables')
+  getPayables(@CurrentUser() user: JwtPayload) {
+    return this.accountsService.getPayables(user.tenantId);
+  }
+
+  @Post('payables/payment')
+  recordPayablePayment(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: any,
+  ) {
+    return this.accountsService.recordPayablePayment(user.tenantId, user.sub, body);
+  }
+
+  @Get('receivables')
+  getReceivables(@CurrentUser() user: JwtPayload) {
+    return this.accountsService.getReceivables(user.tenantId);
+  }
+
+  @Post('receivables/collect')
+  recordReceivableCollection(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: any,
+  ) {
+    return this.accountsService.recordReceivableCollection(user.tenantId, user.sub, body);
+  }
+
+  @Get('bank')
+  getBankAccounts(@CurrentUser() user: JwtPayload) {
+    return this.accountsService.getBankAccounts(user.tenantId);
+  }
+
+  @Post('bank')
+  createBankAccount(@CurrentUser() user: JwtPayload, @Body() body: any) {
+    return this.accountsService.createBankAccount(user.tenantId, body);
+  }
+
+  @Post('bank/transfer')
+  transferBankFunds(@CurrentUser() user: JwtPayload, @Body() body: any) {
+    return this.accountsService.transferBankFunds(user.tenantId, user.sub, body);
+  }
 }

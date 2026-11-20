@@ -83,6 +83,18 @@ export class PayrollController {
 
   // ── Payroll Runs ────────────────────────────────────────────────────────────
 
+  @Get('payslips')
+  getPayslips(
+    @CurrentUser() user: JwtPayload,
+    @Query('month') month?: string,
+    @Query('year') year?: string,
+  ) {
+    const now = new Date();
+    const m = month ? Number(month) : now.getMonth() === 0 ? 12 : now.getMonth();
+    const y = year ? Number(year) : now.getFullYear();
+    return this.payrollService.getPayslips(user.tenantId, m, y);
+  }
+
   @Get('runs')
   listPayrollRuns(@CurrentUser() user: JwtPayload) {
     return this.payrollService.listPayrollRuns(user.tenantId);
@@ -123,5 +135,25 @@ export class PayrollController {
       const annualTax = calculateIncomeTax(annualSalary);
       return { id: e.id, name: e.name, designation: e.designation, annualSalary, annualTax, monthlyTax: Math.round(annualTax / 12) };
     });
+  }
+
+  // Leave Management
+  @Get('leave')
+  listLeaves(@CurrentUser() user: JwtPayload) {
+    return this.payrollService.listLeaves(user.tenantId);
+  }
+
+  @Post('leave')
+  createLeave(@CurrentUser() user: JwtPayload, @Body() body: any) {
+    return this.payrollService.createLeave(user.tenantId, body);
+  }
+
+  @Post('leave/:id/:action')
+  updateLeaveStatus(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Param('action') action: 'approved' | 'rejected',
+  ) {
+    return this.payrollService.updateLeaveStatus(user.tenantId, id, action);
   }
 }

@@ -216,4 +216,42 @@ export class PrescriptionsService {
       },
     });
   }
+
+  // ── Controlled Substance Log ────────────────────────────────────────────────
+
+  async getControlledLog(tenantId: string, from?: Date, to?: Date) {
+    const logs = await this.prisma.controlledSubstanceLog.findMany({
+      where: {
+        tenantId,
+        ...(from && to && { dispensedAt: { gte: from, lte: to } }),
+      },
+      orderBy: { dispensedAt: 'desc' },
+      take: 200,
+    });
+
+    const productIds = [...new Set(logs.map((l) => l.productId))];
+    const customerIds = [...new Set(logs.map((l) => l.customerId))];
+    const userIds = [...new Set(logs.map((l) => l.dispensedById))];
+
+    const [products, customers, users] = await Promise.all([
+      this.prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true } }),
+      this.prisma.customer.findMany({ where: { id: { in: customerIds } }, select: { id: true, name: true } }),
+      this.prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }),
+    ]);
+
+    const prodMap = new Map(products.map((p) => [p.id, p.name]));
+    const custMap = new Map(customers.map((c) => [c.id, c.name]));
+    const userMap = new Map(users.map((u) => [u.id, u.name]));
+
+    return logs.map((l) => ({
+      id: l.id,
+      date: l.dispensedAt.toISOString(),
+      productName: prodMap.get(l.productId) || 'Controlled Medicine',
+      customerName: custMap.get(l.customerId) || 'Walk-in Patient',
+      customerCnic: l.customerCnic,
+      doctorPmdc: l.doctorPmdc || '—',
+      quantity: l.quantity,
+      dispensedBy: userMap.get(l.dispensedById) || 'Pharmacist',
+    }));
+  }
 }

@@ -246,10 +246,169 @@ export class PayrollService {
       where: { tenantId_month_year: { tenantId, month, year } },
       include: {
         items: {
-          include: { employee: { select: { name: true, designation: true, department: true } } },
+          include: { employee: true },
         },
       },
     });
+  }
+
+  async getPayslips(tenantId: string, month: number, year: number) {
+    const run = await this.prisma.payrollRun.findUnique({
+      where: { tenantId_month_year: { tenantId, month, year } },
+      include: {
+        items: {
+          include: { employee: true },
+        },
+      },
+    });
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, settings: true },
+    });
+
+    const branch = await this.prisma.branch.findFirst({
+      where: { tenantId, isActive: true },
+    });
+
+    if (!run) {
+      const employees = await this.prisma.employee.findMany({
+        where: { tenantId, isActive: true },
+        orderBy: { name: 'asc' },
+      });
+
+      const monthNames = [
+        '', 'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December',
+      ];
+
+      const projectedPayslips = employees.map((emp) => {
+        const basicSalary = Number(emp.basicSalary) || 45000;
+        const houseRent = Math.round(basicSalary * 0.45);
+        const medical = Math.round(basicSalary * 0.10);
+        const conveyance = 5000;
+        const grossPay = basicSalary + houseRent + medical + conveyance;
+        const eobi = 1200;
+        const incomeTax = grossPay > 100000 ? Math.round((grossPay - 100000) * 0.15) : 0;
+        const totalDeductions = eobi + incomeTax;
+        const netPay = grossPay - totalDeductions;
+
+        return {
+          id: `proj-${emp.id}`,
+          payrollRunId: 'projected',
+          employeeId: emp.id,
+          employeeName: emp.name,
+          designation: emp.designation,
+          department: emp.department || 'Pharmacy Operations',
+          cnic: emp.cnic || '35202-*******-*',
+          phone: emp.phone,
+          email: emp.email,
+          dateOfJoining: emp.dateOfJoining,
+          bankName: emp.bankName || 'Meezan Bank Ltd',
+          bankAccountNo: emp.bankAccount || '0102-********',
+          period: `${monthNames[month] || 'Current'} ${year}`,
+          month,
+          year,
+          workingDays: 26,
+          presentDays: 26,
+          overtimeHours: 0,
+          basicSalary,
+          allowances: { houseRent, medical, conveyance, bonus: 0 },
+          deductions: { incomeTax, eobi, sessi: 0, lateDeductions: 0, advanceLoan: 0 },
+          grossPay,
+          totalDeductions,
+          netPay,
+          bankTransferRef: `FT-${emp.id.slice(0, 8).toUpperCase()}`,
+          isPaid: false,
+          runStatus: 'projected',
+        };
+      });
+
+      return {
+        tenant: {
+          name: tenant?.name || 'SmartBiz Pharmacy',
+          ntn: (tenant?.settings as any)?.ntn || '1234567-8',
+          branch: branch?.name || 'Main Branch',
+          address: branch?.address || 'Pakistan',
+        },
+        month,
+        year,
+        runStatus: projectedPayslips.length > 0 ? 'projected' : null,
+        payslips: projectedPayslips,
+      };
+    }
+
+    const monthNames = [
+      '', 'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+
+    const payslips = run.items.map((item) => {
+      const emp = item.employee;
+      const allowances = (item.allowances as Record<string, number>) || {};
+      const deductions = (item.deductions as Record<string, number>) || {};
+
+      const basicSalary = Number(emp.basicSalary) || 0;
+      const grossPay = Number(item.grossPay);
+      const netPay = Number(item.netPay);
+      const totalDeductions = Object.values(deductions).reduce((s, v) => s + Number(v), 0);
+
+      return {
+        id: item.id,
+        payrollRunId: run.id,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        designation: emp.designation,
+        department: emp.department || 'Pharmacy Operations',
+        cnic: emp.cnic || '35202-*******-*',
+        phone: emp.phone,
+        email: emp.email,
+        dateOfJoining: emp.dateOfJoining,
+        bankName: emp.bankName || 'Meezan Bank Ltd',
+        bankAccountNo: emp.bankAccount || '0102-********',
+        period: `${monthNames[month]} ${year}`,
+        month,
+        year,
+        workingDays: item.workingDays,
+        presentDays: item.presentDays,
+        overtimeHours: Number(item.overtimeHours) || 0,
+        basicSalary,
+        allowances: {
+          houseRent: Number(allowances.houseRent) || Math.round(basicSalary * 0.45),
+          medical: Number(allowances.medical) || Math.round(basicSalary * 0.10),
+          conveyance: Number(allowances.conveyance) || 5000,
+          bonus: Number(allowances.bonus) || 0,
+          ...allowances,
+        },
+        deductions: {
+          incomeTax: Number(deductions.incomeTax) || 0,
+          eobi: Number(deductions.eobi) || 1200,
+          sessi: Number(deductions.sessi) || 0,
+          lateDeductions: Number(deductions.lateDeductions) || 0,
+          advanceLoan: Number(deductions.advanceLoan) || 0,
+          ...deductions,
+        },
+        grossPay,
+        totalDeductions,
+        netPay,
+        bankTransferRef: item.bankTransferRef || `FT-${item.id.slice(0, 8).toUpperCase()}`,
+        isPaid: item.isPaid,
+        runStatus: run.status,
+      };
+    });
+
+    return {
+      tenant: {
+        name: tenant?.name || 'SmartBiz Pharmacy',
+        ntn: (tenant?.settings as any)?.ntn || '1234567-8',
+        branch: branch?.name || 'Main Branch',
+        address: branch?.address || 'Main Commercial Area, Lahore / Karachi, Pakistan',
+      },
+      month,
+      year,
+      runStatus: run.status,
+      payslips,
+    };
   }
 
   async approvePayroll(tenantId: string, month: number, year: number, userId: string) {
@@ -270,6 +429,51 @@ export class PayrollService {
       where: { tenantId },
       select: { id: true, month: true, year: true, status: true, createdAt: true, paidAt: true },
       orderBy: [{ year: 'desc' }, { month: 'desc' }],
+    });
+  }
+
+  async listLeaves(tenantId: string) {
+    const leaves = await this.prisma.leaveApplication.findMany({
+      where: { tenantId },
+      include: { employee: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return leaves.map((l) => ({
+      id: l.id,
+      employeeId: l.employeeId,
+      employeeName: l.employee?.name ?? 'Unknown',
+      leaveType: l.leaveType,
+      fromDate: l.fromDate.toISOString().slice(0, 10),
+      toDate: l.toDate.toISOString().slice(0, 10),
+      days: l.days,
+      status: l.status,
+      reason: l.reason ?? '',
+    }));
+  }
+
+  async createLeave(tenantId: string, body: any) {
+    const from = new Date(body.fromDate);
+    const to = new Date(body.toDate);
+    const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+
+    return this.prisma.leaveApplication.create({
+      data: {
+        tenantId,
+        employeeId: body.employeeId,
+        leaveType: body.leaveType,
+        fromDate: from,
+        toDate: to,
+        days,
+        reason: body.reason,
+        status: 'pending',
+      },
+    });
+  }
+
+  async updateLeaveStatus(tenantId: string, id: string, status: string) {
+    return this.prisma.leaveApplication.update({
+      where: { id },
+      data: { status },
     });
   }
 }

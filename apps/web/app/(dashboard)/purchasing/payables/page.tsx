@@ -1,4 +1,9 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
-export default function PayablesPage() {
-  return <ComingSoon title="Payables" description="Track outstanding supplier invoices, aging reports, and payment scheduling." />;
+import { PayablesContent } from '../../accounts/payables/payables-content';
+
+export const metadata = {
+  title: 'Purchasing Payables — SmartBiz Pro Pharmacy',
+};
+
+export default function PurchasingPayablesPage() {
+  return <PayablesContent />;
 }

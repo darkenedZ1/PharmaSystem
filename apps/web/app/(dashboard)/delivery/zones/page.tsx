@@ -1,4 +1,10 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
+import type { Metadata } from 'next';
+import { ZonesContent } from './zones-content';
+
+export const metadata: Metadata = {
+  title: 'Delivery Zones & Pricing — SmartBiz Pro Pharmacy',
+};
+
 export default function DeliveryZonesPage() {
-  return <ComingSoon title="Zones & Pricing" description="Define delivery zones by area or radius with tiered pricing and minimum order values." />;
+  return <ZonesContent />;
 }

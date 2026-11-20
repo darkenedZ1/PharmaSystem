@@ -1,4 +1,10 @@
-import { ComingSoon } from '@/components/ui/coming-soon';
+import type { Metadata } from 'next';
+import { FbrReportsContent } from './fbr-reports-content';
+
+export const metadata: Metadata = {
+  title: 'FBR Reports & Annexure-C — SmartBiz Pro Pharmacy',
+};
+
 export default function FbrReportsPage() {
-  return <ComingSoon title="FBR Reports" description="Monthly FBR sales summary and IRIS-compatible export files." />;
+  return <FbrReportsContent />;
 }

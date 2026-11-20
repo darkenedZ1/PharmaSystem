@@ -136,4 +136,78 @@ export class DeliveryService {
       },
     });
   }
+
+  // ── Delivery Zones & Pricing ────────────────────────────────────────────────
+
+  async getZones(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    const settings = (tenant?.settings as any) || {};
+    if (settings.deliveryZones && settings.deliveryZones.length > 0) {
+      return settings.deliveryZones;
+    }
+
+    const defaultZones = [
+      {
+        id: 'zone-dha-clifton',
+        name: 'DHA & Clifton Zone',
+        areas: 'DHA Phases 1-8, Clifton Blocks 1-9, Bath Island',
+        deliveryFee: 150,
+        freeDeliveryAbove: 2000,
+        estimatedMinutes: 30,
+        isActive: true,
+      },
+      {
+        id: 'zone-gulshan-johar',
+        name: 'Gulshan & Johar Zone',
+        areas: 'Gulshan-e-Iqbal Blocks 1-13, Gulistan-e-Johar, University Road',
+        deliveryFee: 200,
+        freeDeliveryAbove: 2500,
+        estimatedMinutes: 45,
+        isActive: true,
+      },
+      {
+        id: 'zone-gulberg-cantt',
+        name: 'Gulberg & Cantt Zone',
+        areas: 'Main Boulevard, Gulberg II-III, Lahore Cantt, Cavalry Ground',
+        deliveryFee: 150,
+        freeDeliveryAbove: 2000,
+        estimatedMinutes: 35,
+        isActive: true,
+      },
+      {
+        id: 'zone-express-citywide',
+        name: 'Express Urgent Delivery (All Areas)',
+        areas: 'Any address within 15km radius (Special temperature-controlled rider)',
+        deliveryFee: 350,
+        freeDeliveryAbove: 5000,
+        estimatedMinutes: 20,
+        isActive: true,
+      },
+    ];
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { settings: { ...settings, deliveryZones: defaultZones } },
+    });
+
+    return defaultZones;
+  }
+
+  async saveZones(tenantId: string, zones: any[]) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    const settings = (tenant?.settings as any) || {};
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { settings: { ...settings, deliveryZones: zones } },
+    });
+
+    return zones;
+  }
 }
